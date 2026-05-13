@@ -35,9 +35,14 @@ Your Vercel account (e.g. mr.ameyanaik@gmail.com) is only used in the browser �
 
 ## Part B — Deploy the website (Vercel)
 
+**Project name:** use **`hireflow-ai`** (not `frontend`). That gives a clean default URL like `https://hireflow-ai.vercel.app` instead of a generic folder name. Your Vercel *team* slug may still appear in some preview URLs; that is separate from the project name.
+
+For a custom domain such as **`hireflow.ai`**, buy/register the domain and add it under **Project → Settings → Domains** in Vercel (project names cannot contain dots).
+
 1. Go to [Vercel](https://vercel.com) and log in with **mr.ameyanaik@gmail.com** (or your linked GitHub).
 2. **Add New… → Project** → **Import** your GitHub repository.
 3. **Root Directory:** set to **`frontend`** (important — Vite app lives there).
+4. **Project name:** set to **`hireflow-ai`** (override the default if Vercel suggests `frontend`).
 4. **Framework Preset:** Vite (auto-detected).
 5. **Build & Output settings:** defaults are usually:
    - Build command: `npm run build`
