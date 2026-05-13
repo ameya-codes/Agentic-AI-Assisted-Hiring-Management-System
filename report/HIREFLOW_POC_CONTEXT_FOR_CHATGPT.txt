@@ -1,0 +1,334 @@
+================================================================================
+HIREFLOW AI — DETAILED POC DESCRIPTION (CONTEXT FOR REPORT / LaTeX ASSISTANT)
+================================================================================
+Use this document as system or project context when asking ChatGPT to help
+draft, reorganize, or expand a formal academic report (e.g., MIS 6308) in
+LaTeX. It describes the application AS BUILT in the repository, not a future
+product vision.
+
+--------------------------------------------------------------------------------
+1. PRODUCT IDENTITY AND GOAL
+--------------------------------------------------------------------------------
+
+Name: HireFlow AI (also referred to in UI as "HireFlow AI" hiring workspace).
+
+Purpose: A proof-of-concept (POC) for an ENTERPRISE-STYLE, AGENTIC AI-ASSISTED
+HIRING WORKFLOW. It demonstrates:
+  - Which hiring subprocesses use an LLM vs deterministic logic vs human gates
+  - Centralized prompts suitable for course "required prompt" deliverables
+  - Role-based experiences (candidate careers vs internal staff)
+  - Persistence (SQLite), REST API (FastAPI), and a production-like SPA (React)
+  - Optional LLM calls (OpenAI-compatible API) with offline fallbacks
+
+It is NOT a production HRIS/ATS replacement. It is a semester-scale POC with
+demo authentication (role in header / localStorage).
+
+--------------------------------------------------------------------------------
+2. TECHNOLOGY STACK
+--------------------------------------------------------------------------------
+
+Backend:
+  - Python 3.10+
+  - FastAPI (api/main.py), Uvicorn
+  - SQLite file: hiring_poc.db (created next to db.py at project root)
+  - python-dotenv for OPENAI_API_KEY in .env
+  - Resume text extraction: pypdf (PDF), python-docx (DOCX), plain text (TXT)
+  - Optional: Streamlit UI (app.py, ui_theme.py) — legacy / alternate demo path
+
+Frontend (primary UI):
+  - React + TypeScript + Vite + Tailwind CSS
+  - Package name in package.json: hireflow-ai-ui
+  - Dev server: Vite on http://127.0.0.1:5173 (proxy /api to port 8000)
+  - React Router for /login and /app/*
+
+AI layer:
+  - mock_ai.py — orchestrates each "agent" helper: tries LLM first, falls back
+    to heuristics if no key or on error
+  - llm.py — OpenAI Chat Completions (JSON or text) when OPENAI_API_KEY set
+  - prompts.py — system prompts + structured user payloads per subprocess
+
+--------------------------------------------------------------------------------
+3. HOW TO RUN (FOR REPORT "PROTOTYPE" SECTION)
+--------------------------------------------------------------------------------
+
+Terminal A (project root):
+  uvicorn api.main:app --reload --host 127.0.0.1 --port 8000
+
+Terminal B:
+  cd frontend && npm run dev
+
+Browser: http://127.0.0.1:5173/
+
+Optional Streamlit:
+  streamlit run app.py
+
+Environment:
+  Copy .env.example to .env; set OPENAI_API_KEY for live LLM (never commit keys).
+
+--------------------------------------------------------------------------------
+4. AUTHENTICATION AND AUTHORIZATION (POC LIMITATIONS)
+--------------------------------------------------------------------------------
+
+There is NO real login server. The React app stores demoRole in localStorage
+("Hiring Manager", "HR Recruiter", "Candidate", "Interviewer") and sends it on
+every API request as header: X-Demo-Role.
+
+FastAPI dependency pattern:
+  - "InternalRole" — any role EXCEPT Candidate — may access hiring workspace
+    JSON routes (dashboard, jobs, pipeline, screening, interviews, offers, etc.)
+  - "CandidateRole" — only Candidate — may access /api/careers/*
+
+If Candidate calls internal routes, API returns 403 so confidential JSON
+(e.g., company-wide stats, salary bands, audit) is not returned even via DevTools.
+
+Sign out clears: demoRole, demo applicant email key, active requisition id key.
+
+--------------------------------------------------------------------------------
+5. ACTIVE REQUISITION (JOB SCOPE) — CROSS-CUTTING UX RULE
+--------------------------------------------------------------------------------
+
+Internal users (not Candidate) share a React context: RequisitionProvider.
+
+localStorage key: hireflowActiveRequisitionId (integer job id).
+
+The App shell loads GET /api/jobs and:
+  - If no jobs: clears active id
+  - If stored id missing or invalid: sets active id to first job
+
+When user publishes a new job (POST /api/jobs), response includes { id } and
+the UI sets that id as the active requisition.
+
+Most internal list endpoints accept optional query parameter: job_id=
+When activeJobId is set, the frontend appends ?job_id=<id> so data is FILTERED
+to that requisition (candidates, interviews, offers, dashboard stats, etc.).
+
+Screening uses activeJobId directly as job_id when saving/previewing (no second
+job dropdown on Screening page).
+
+Careers flow is NOT scoped by internal active requisition; candidates pick a
+role at apply time.
+
+--------------------------------------------------------------------------------
+6. DATABASE SCHEMA (SQLite)
+--------------------------------------------------------------------------------
+
+Tables (db.py):
+
+jobs
+  - id PK, title, department, location, salary_min, salary_max,
+    experience_level, required_skills, description, status (default 'Open'),
+    created_at
+
+candidates
+  - id PK, job_id FK -> jobs.id, name, email, resume_text, status (pipeline),
+    created_at
+  - Every applicant row is tied to exactly one job_id (requisition).
+
+screenings
+  - id PK, candidate_id FK UNIQUE -> candidates.id
+  - skills, experience, education, certifications, strengths, weaknesses,
+    match_score, recommendation, created_at
+
+interviews
+  - id PK, candidate_id FK, interviewer_name, scheduled_at, interview_type,
+    invitation_email, tech_questions, behavioral_questions, created_at
+
+feedback
+  - id PK, interview_id FK, technical_feedback, communication_feedback,
+    overall_rating, hire_decision, ai_summary, sentiment, candidate_strengths,
+    candidate_risks, final_recommendation, created_at
+
+offers
+  - id PK, candidate_id FK, salary, start_date, job_title, reporting_manager,
+    letter_text, approval_status (default 'Draft'), created_at
+
+onboarding_tasks
+  - id PK, candidate_id FK, task_name, completed, sort_order
+
+audit_logs
+  - id PK, action, entity_type, entity_id, user_role, details, created_at
+
+Seed data (seed_if_empty): sample jobs, candidates in various pipeline stages,
+sample interviews, feedback, one offer path, onboarding tasks, initial audit.
+
+--------------------------------------------------------------------------------
+7. REST API ENDPOINTS (SUMMARY)
+--------------------------------------------------------------------------------
+
+Public health:
+  GET /api/health
+
+Careers (requires X-Demo-Role: Candidate):
+  GET  /api/careers/open-roles
+       — public-safe fields only (no salary_min/max in response)
+  GET  /api/careers/overview?email=
+       — open_roles count + applications matched by email (lowercase trim)
+  GET  /api/careers/my-applications?email=
+  POST /api/careers/apply (multipart: job_id, name, email, resume file)
+       — extracts text, runs same screening as internal, inserts candidate +
+         screening, audit CAREER_APPLY
+
+Internal (requires internal role header; Candidate gets 403):
+  GET  /api/dashboard?job_id=optional
+       — aggregates; when job_id set, stats + pipeline scoped; includes
+         active_requisition headline object and requisitions list (possibly one row)
+  GET  /api/jobs — full job rows including salary (internal only)
+  POST /api/jobs — create requisition; returns { id }
+  GET  /api/jobs/applicants?job_id=optional — applicant roster for staff
+  POST /api/ai/job-description — AI draft JD from structured fields
+  GET  /api/candidates/ranked?job_id=optional — then mock_ai.rank_candidates
+  PATCH /api/candidates/{id}/status — pipeline update + audit
+  GET  /api/candidates/shortlisted?job_id=optional
+  POST /api/ai/preview-screen — JSON body job_id + resume_text
+  POST /api/candidates/screen — JSON body job_id, name, email, resume_text
+  POST /api/interviews — schedule; generates email + questions via AI helpers
+  GET  /api/interviews?job_id=optional
+  POST /api/feedback — stores feedback + AI summary fields
+  GET  /api/offers/eligible-candidates?job_id=optional
+  GET  /api/offers?job_id=optional
+  POST /api/offers — draft offer letter via AI + insert offer row
+  PATCH /api/offers/{id}/status
+  GET  /api/onboarding/candidates
+  GET  /api/onboarding/{candidate_id}/tasks
+  PATCH /api/onboarding/tasks/{task_id}
+  GET  /api/audit
+  GET  /api/ai/onboarding?q= — FAQ-style answer
+
+CORS allows localhost/127.0.0.1 on 5173 and 5174.
+
+--------------------------------------------------------------------------------
+8. LLM VS NON-LLM (FOR "PROCESS ANALYSIS" SECTIONS)
+--------------------------------------------------------------------------------
+
+LLM-assisted (when API key present; else local heuristics in mock_ai):
+  - Job description drafting (POST /api/ai/job-description)
+  - Resume screening / structured signals (preview-screen, screen, careers apply)
+  - Interview invitation email text
+  - Interview question banks (technical + behavioral)
+  - Post-interview feedback summary + structured strengths/risks/recommendation
+  - Offer letter prose (salary numbers come from user input, not invented by LLM)
+  - Onboarding FAQ chat-style answer
+
+Non-LLM / deterministic / system:
+  - All SQLite CRUD, foreign keys, audit log writes
+  - Candidate ranking ORDER BY match_score (heuristic sort, not LLM rerank)
+  - Role gating (403 for wrong surface)
+  - File size limit (5MB) and extension checks for careers upload
+  - Legacy .doc not supported (user must use DOCX/PDF/TXT)
+
+Human / UI gates (conceptual; enforced by who can click what in demo):
+  - Pipeline status changes
+  - Offer approval_status changes (HR Recruiter in UI)
+  - Salary and legal sign-off narrative in real world; POC exposes fields
+
+--------------------------------------------------------------------------------
+9. PROMPTS DELIVERABLE
+--------------------------------------------------------------------------------
+
+File: prompts.py
+
+Contains SYSTEM strings and builder functions that emit structured USER content
+(JSON facts from DB or forms) for: job description, screening, interview email,
+interview questions, feedback summary, offer letter, onboarding FAQ.
+
+Course report should cite prompts.py as the canonical "required prompts" source.
+
+--------------------------------------------------------------------------------
+10. REACT APP — ROUTES AND ROLE NAVIGATION
+--------------------------------------------------------------------------------
+
+/login — pick role, store in localStorage, navigate to /app/dashboard
+
+/app/* wrapped in RequireAuth + RequisitionProvider (Candidate still gets provider
+but only uses careers endpoints for data).
+
+RoleRoute redirects unauthorized roles away from certain paths:
+  - Screening, Pipeline: HR Recruiter + Hiring Manager
+  - Interviews: + Interviewer
+  - Offers, Onboarding: HR + HM
+  - Agents: all internal (HM, HR, Interviewer) — NOT in Candidate nav
+
+Candidate nav: Overview (careers dashboard), Open roles (careers apply)
+
+HM nav: Overview, Requisitions, Pipeline, Interviews, Offers, Agents
+
+HR nav: adds Screening, Onboarding vs HM
+
+Interviewer nav: Overview, Interviews (feedback tab default), Agents
+
+Pages (high level):
+  - DashboardPage — Candidate: careers overview + applications by email; Internal:
+    KPI cards (scoped when job_id), pipeline, audit, requisitions table for HM/HR
+  - JobsPage — Candidate: CareersSection (cards, apply modal upload); Internal:
+    create requisition form + published table + applicants table for active req
+  - ScreeningPage — uses active requisition; preview + save to ATS
+  - PipelinePage — ranked table + status update form (scoped)
+  - InterviewsPage — schedule tab (shortlist) + feedback tab (pending interviews)
+  - OffersPage — HR new offer form + offer list + status dropdown
+  - OnboardingPage — pick onboarded candidate, toggle tasks
+  - AgentsPage — explanatory copy on agents (internal)
+
+--------------------------------------------------------------------------------
+11. CANDIDATE CAREERS VS INTERNAL CONFIDENTIALITY
+--------------------------------------------------------------------------------
+
+Candidates never see:
+  - Org-wide dashboard counts for all reqs, audit trail, salary bands on job list,
+    internal requisition tooling.
+
+They see:
+  - Open roles without compensation fields
+  - Apply with PDF/DOCX/TXT
+  - Overview listing their applications when email matches (stored in
+    localStorage demoApplicantEmail on apply)
+
+Résumé binaries are NOT stored on disk; extracted plain text stored in
+candidates.resume_text.
+
+--------------------------------------------------------------------------------
+12. STREAMLIT (OPTIONAL PARALLEL UI)
+--------------------------------------------------------------------------------
+
+app.py still implements a multi-page Streamlit experience with role gating.
+Not required for the React POC path. requirements.txt lists streamlit for this.
+
+--------------------------------------------------------------------------------
+13. REPOSITORY FILES WORTH CITING IN A REPORT
+--------------------------------------------------------------------------------
+
+db.py              — schema, queries, seed
+api/main.py        — routes, dependencies, CORS
+mock_ai.py         — agent orchestration + fallbacks
+llm.py             — OpenAI HTTP client
+prompts.py         — prompts artifact
+resume_extract.py  — upload parsing
+frontend/src/      — SPA
+report/main.tex    — LaTeX starter produced for this project
+README.md          — run instructions, LLM vs process table
+
+--------------------------------------------------------------------------------
+14. KNOWN POC GAPS (HONEST LIMITATIONS FOR "FUTURE WORK")
+--------------------------------------------------------------------------------
+
+- No OAuth/JWT; header role is trivially spoofed outside a trusted browser demo
+- careers/my-applications by email is not a secure identity model
+- No virus scan on uploads; no WORM storage for compliance
+- No real ATS sync (Greenhouse/Workday) — only described as integration pattern
+- Interviewer may still hit dashboard with scoped stats — fine for class POC
+- Streamlit and React can diverge in features over time
+
+--------------------------------------------------------------------------------
+15. ELEVATOR PITCH (ONE PARAGRAPH)
+--------------------------------------------------------------------------------
+
+HireFlow AI is a SQLite-backed hiring POC with a FastAPI backend and React
+frontend. Internal users pick an active job requisition so screening, pipeline,
+interviews, and offers stay scoped to job_id; candidates use a careers portal
+that hides sensitive compensation data, applies with résumé upload, and feeds
+recruiters the same AI-assisted screening pipeline. LLM calls live behind
+prompts.py with graceful offline behavior; human approval and audit logging
+model how a real enterprise would gate agentic automation.
+
+================================================================================
+END OF CONTEXT DOCUMENT
+================================================================================

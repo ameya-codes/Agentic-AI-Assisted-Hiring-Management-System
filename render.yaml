@@ -1,0 +1,20 @@
+# Render Blueprint — FastAPI API for HireFlow AI (use with Vercel-hosted frontend)
+# https://render.com/docs/blueprint-spec
+#
+# Deploy: connect this repo on Render → New Blueprint → select render.yaml
+# After deploy, set on Vercel: VITE_API_URL=https://<your-service>.onrender.com
+
+services:
+  - type: web
+    name: hireflow-ai-api
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.6"
+      - key: OPENAI_API_KEY
+        sync: false

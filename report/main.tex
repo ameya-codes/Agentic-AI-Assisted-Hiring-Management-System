@@ -1,0 +1,608 @@
+\documentclass[12pt]{article}
+
+\usepackage[a4paper, margin=0.5in]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{pdflscape}
+
+\setstretch{1.1}
+\setlist[itemize]{noitemsep, topsep=2pt}
+\setlist[enumerate]{noitemsep, topsep=2pt}
+
+\setlength{\parindent}{0pt}
+
+% Placeholder for figures you will add under report/figures/
+\newcommand{\figplaceholder}[2]{%
+  \begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.92\textwidth}{\centering\vspace{3.2cm}\textsl{#1}\vspace{0.4cm}\\\small\texttt{#2}\vspace{3.2cm}}}
+    \caption{#1}
+  \end{figure}%
+}
+
+\begin{document}
+
+% ---------------- TITLE PAGE ----------------
+\begin{titlepage}
+    \centering
+    \vspace*{1.5cm}
+
+    {\Huge \textbf{HireFlow AI}\par}
+    \vspace{0.5cm}
+
+    {\Large Agentic AI-Assisted Enterprise Hiring Workflow (Proof of Concept)\par}
+    \vspace{1.5cm}
+
+    {\large MIS 6308: Systems Analysis and Project Management\par}
+    \vspace{0.5cm}
+
+    {\large Semester Project Report\par}
+    \vspace{2cm}
+
+    {\large Team Members:\par}
+    \vspace{0.3cm}
+    {\large AMEYA MAHENDRA NAIK\par}
+    {\large CHINMYEE KIRAN GURAV\par}
+    {\large MEGHA MANOJ NAIR\par}
+
+    \vfill
+
+    {\large \today\par}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% -------------------------------------------------
+\section{Introduction}
+
+\subsection{Project Overview}
+
+\textbf{HireFlow AI} is a proof-of-concept (POC) for an \textbf{agentic AI-assisted hiring workflow} inside a fictional enterprise. The system models how a modern talent acquisition stack could combine \textbf{Large Language Model (LLM)} support for language-heavy tasks with \textbf{deterministic systems} (database, role-based access, audit trail, human approval gates) for compliance-sensitive decisions.
+
+The POC implements: (1) \textbf{job requisitions} with optional AI-drafted descriptions; (2) \textbf{resume screening} with structured AI signals and human-readable summaries; (3) \textbf{candidate pipeline} ranking and status updates; (4) \textbf{interview scheduling} with AI-generated invitation text and question banks; (5) \textbf{post-interview feedback} summarization; (6) \textbf{offer letter} drafting with explicit human control over salary and approval states; (7) \textbf{onboarding} task checklists and an FAQ-style assistant; and (8) a \textbf{candidate careers portal} where external applicants browse \textbf{open roles only}, upload PDF/DOCX résumés, and apply---with applications flowing to recruiters on the same \texttt{job\_id}.
+
+The implementation uses \textbf{SQLite} as the system of record, a \textbf{FastAPI} REST layer, and a \textbf{React + TypeScript + Vite + Tailwind} single-page application. An optional \textbf{Streamlit} UI remains in the repository for quick classroom demos. LLM calls are routed through a small integration module (OpenAI-compatible API) with \textbf{local heuristic fallbacks} when no API key is configured.
+
+\subsection{Business Background}
+
+Enterprise hiring spans many stakeholders---hiring managers, recruiters, interviewers, candidates, HR operations, and legal/compliance. Traditional applicant tracking systems (ATS) store structured data well but often require heavy manual work for \textbf{drafting} job posts, \textbf{summarizing} résumés, \textbf{preparing} interview materials, and \textbf{writing} offer and onboarding communications.
+
+Large language models can accelerate these language tasks, but course and industry guidance emphasize that \textbf{not every subprocess should be delegated to an LLM}. Compensation decisions, legal approvals, background checks, and authoritative policy interpretation remain human or system-controlled. The HireFlow AI POC is designed to make that split explicit and demonstrable.
+
+\subsection{Purpose of the System}
+
+The purpose of HireFlow AI is to \textbf{document and prototype} a hiring function where:
+\begin{itemize}
+    \item Each subprocess is classified as \textbf{LLM-assisted}, \textbf{traditional/automated}, or \textbf{human-only};
+    \item \textbf{Prompts} and structured payloads are first-class artifacts for grading and design review;
+    \item \textbf{Human gates} exist before irreversible or sensitive actions (e.g., offer salary, approval states);
+    \item \textbf{Candidates} see only careers-appropriate data, while internal staff see full requisition and pipeline views scoped to an \textbf{active requisition} (\texttt{job\_id}).
+\end{itemize}
+
+\subsection{Scope of the Project}
+
+\textbf{In scope:} business and process analysis; data requirements; LLM vs.\ non-LLM analysis; prompt documentation; UML-style artifacts (placeholders in this document for diagrams you will insert); SQLite logical schema; API design; role-based UX; prototype implementation; audit logging; careers apply with file upload and text extraction (PDF/DOCX/TXT).
+
+\textbf{Out of scope:} production authentication/authorization (demo uses a header role); real ATS vendor integration (described as a future API sync); production file storage (résumé binaries are not persisted---extracted text is stored); enterprise SSO; e-signature; pay equity compliance engines; multi-tenant SaaS operations.
+
+\subsection{Mapping to Course Deliverables (Spring 2026)}
+
+Table~\ref{tab:deliverables} maps common ``Project Report Deliverables'' expectations for a systems analysis course to sections of this report and to repository artifacts. \textit{Adjust row wording if your official deliverables document uses different labels---place that PDF/DOCX beside this \texttt{.tex} when finalizing.}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{p{4.6cm}p{5.2cm}p{5.5cm}}
+\toprule
+\textbf{Typical deliverable} & \textbf{Report section(s)} & \textbf{Repository / POC evidence} \\
+\midrule
+Problem / domain analysis & \S\ref{sec:problem}, \S\ref{sec:businessfn} & \texttt{README.md}, this report \\
+Business processes (BPMN-level narrative) & \S\ref{sec:processes}, Fig.\ placeholders & \texttt{api/main.py}, UI flows \\
+Data requirements \& logical schema & \S\ref{sec:datareq}, \S\ref{sec:dbdesign} & \texttt{db.py}, \texttt{hiring\_poc.db} \\
+LLM vs.\ traditional design & \S\ref{sec:llm}, \S\ref{sec:traditional} & \texttt{mock\_ai.py}, \texttt{llm.py} \\
+\textbf{Required prompts} & \S\ref{sec:prompts} & \texttt{prompts.py} (source of truth) \\
+UML set (use case, sequence, class) & \S\ref{sec:uc}--\S\ref{sec:sequence} & Diagrams you will add \\
+UI / UX & \S\ref{sec:ui} & \texttt{frontend/}, optional \texttt{app.py} \\
+Working POC & \S\ref{sec:prototype} & FastAPI + React + SQLite \\
+Project management & \S\ref{sec:pm} & Minutes table (edit dates) \\
+\bottomrule
+\end{tabular}
+\caption{Deliverables mapping (template---align to your official Spring 2026 checklist).}
+\label{tab:deliverables}
+\end{table}
+
+% -------------------------------------------------
+\section{Problem Statement}
+\label{sec:problem}
+
+\subsection{Current Business Problems}
+
+Hiring teams juggle many tools: requisitions in one place, inbound résumés in email, interview feedback in documents, and offers in templates. Without careful design, \textbf{AI tools risk exposing internal data} to the wrong audience (e.g., candidates seeing compensation bands) or \textbf{over-automating} decisions that require human judgment.
+
+\subsection{Impact on Stakeholders}
+
+\textbf{Candidates} need transparency on \textit{which roles are open} and \textit{what they applied to}, without internal workforce metrics. \textbf{Recruiters} need a single queue per requisition. \textbf{Hiring managers} need requisition status and applicant volume. \textbf{Interviewers} need interview packets and feedback forms without full HR confidential views.
+
+\subsection{Need for a Hybrid AI + Traditional Design}
+
+The POC adopts a \textbf{hybrid architecture}: LLMs draft and summarize; SQLite stores authoritative state; FastAPI enforces role-based access for sensitive JSON routes; the React UI provides an \textbf{active requisition} scope so downstream screens consistently filter on \texttt{job\_id}.
+
+% -------------------------------------------------
+\section{Business Function Analysis}
+\label{sec:businessfn}
+
+\subsection{Primary Business Function}
+
+The supported business function is \textbf{Talent Acquisition and Hiring Operations}: requisition intake, applicant acquisition, screening, selection workflow, interview execution, offer preparation, and onboarding handoff---with explicit separation between \textbf{external careers} and \textbf{internal hiring workspace}.
+
+\subsection{Secondary Functions}
+
+\textbf{Workforce planning} (opening/closing reqs), \textbf{compliance-oriented audit} (who changed what), and \textbf{communication generation} (emails, questions, summaries) appear as supporting functions.
+
+% -------------------------------------------------
+\section{Key Business Processes}
+\label{sec:processes}
+
+\subsection{Requisition Creation and Publication}
+
+A hiring manager or HR recruiter defines title, department, location, compensation band (internal view), skills, and description. An optional \textbf{AI job description draft} may be requested before \textbf{publishing} the requisition. Publishing assigns a persistent \texttt{job\_id} used by all downstream records.
+
+\subsection{Candidate Application (Careers)}
+
+Candidates authenticate in the \textbf{demo sense} (role selection). They browse \textbf{open roles} without salary fields, apply to a role, and upload \textbf{PDF/DOCX/TXT}. The API extracts text, runs the same screening engine used internally, and inserts a \texttt{candidates} row tied to \texttt{job\_id}.
+
+\subsection{Recruiter Screening (Internal)}
+
+Recruiters paste or upload résumé text for a \textbf{scoped requisition}, preview AI screening output, and save the candidate to the ATS (SQLite). Screening creates structured fields and a match score used for ranking.
+
+\subsection{Pipeline Management}
+
+Recruiters and hiring managers view candidates \textbf{for the active requisition}, ordered by screening score, and update pipeline status with audit logging.
+
+\subsection{Interview Scheduling}
+
+For shortlisted candidates, the system drafts invitation email text and behavioral/technical question sets using the active job context and résumé snippet, then stores an interview record.
+
+\subsection{Feedback and Offer}
+
+Interviewers submit structured feedback; an LLM summarizes strengths/risks. HR may draft an offer letter with AI assistance; salary numbers and approval states remain explicit human fields.
+
+\subsection{Onboarding}
+
+After offer approval, a checklist models onboarding tasks; an FAQ assistant answers common questions (LLM-assisted, policy truth still human-owned).
+
+% -------------------------------------------------
+\section{Data Requirements}
+\label{sec:datareq}
+
+\subsection{Requisition (\texttt{jobs})}
+
+Title, department, location, experience level, required skills, description, status (e.g., Open), internal salary band fields, timestamps.
+
+\subsection{Applicant / Candidate (\texttt{candidates})}
+
+\texttt{job\_id} (foreign key), name, email, \texttt{resume\_text} (extracted plain text in POC), pipeline \texttt{status}, timestamps.
+
+\subsection{Screening Result (\texttt{screenings})}
+
+One-to-one with candidate: skills/experience/education fields, strengths/weaknesses, \texttt{match\_score}, recommendation string.
+
+\subsection{Interview and Feedback}
+
+\texttt{interviews} store schedule metadata and generated content; \texttt{feedback} stores ratings, hire decision, and AI summary fields.
+
+\subsection{Offer and Onboarding}
+
+\texttt{offers} store salary, dates, letter text, approval status; \texttt{onboarding\_tasks} store checklist rows.
+
+\subsection{Audit (\texttt{audit\_logs})}
+
+Action, entity type/id, demo role, textual details---non-LLM system accountability.
+
+% -------------------------------------------------
+\section{LLM-Based Automation Analysis}
+\label{sec:llm}
+
+The POC uses an OpenAI-compatible chat model (optional) implemented in \texttt{llm.py}, with prompts centralized in \texttt{prompts.py}. Table~\ref{tab:llm} summarizes responsibilities.
+
+\begin{longtable}{|p{5.2cm}|p{12.8cm}|}
+\caption{LLM-based automation in HireFlow AI}\label{tab:llm}\\
+\hline
+\textbf{Subprocess} & \textbf{LLM responsibility (POC)} \\
+\hline
+\endfirsthead
+\multicolumn{2}{c}%
+{{\bfseries \tablename\ \thetable{} -- continued from previous page}} \\
+\hline
+\textbf{Subprocess} & \textbf{LLM responsibility (POC)} \\
+\hline
+\endhead
+
+Job description drafting &
+Generate employer-facing job post prose from structured inputs (title, department, location, skills, notes). \\
+\hline
+
+Résumé screening &
+Extract structured screening dimensions and narrative strengths/weaknesses from résumé text against required skills and job title context. \\
+\hline
+
+Interview invitation email &
+Draft professional scheduling email referencing role, interviewer, and time. \\
+\hline
+
+Interview questions &
+Propose technical and behavioral question lists grounded in role and résumé snippet. \\
+\hline
+
+Feedback summarization &
+Summarize interviewer comments; surface strengths, risks, and a recommended disposition narrative. \\
+\hline
+
+Offer letter drafting &
+Generate formal letter text; \textbf{not} authoritative for compensation---numbers come from human-entered fields. \\
+\hline
+
+Onboarding FAQ &
+Answer common new-hire questions in a helpful tone; policies remain human-verified. \\
+\hline
+
+\end{longtable}
+
+% -------------------------------------------------
+\section{Processes Handled Using Traditional Systems}
+\label{sec:traditional}
+
+\begin{longtable}{|p{5.2cm}|p{12.8cm}|}
+\caption{Traditional and deterministic subprocesses}\label{tab:traditional}\\
+\hline
+\textbf{Subprocess} & \textbf{Traditional / deterministic responsibility} \\
+\hline
+\endfirsthead
+\multicolumn{2}{c}%
+{{\bfseries \tablename\ \thetable{} -- continued from previous page}} \\
+\hline
+\textbf{Subprocess} & \textbf{Traditional / deterministic responsibility} \\
+\hline
+\endhead
+
+Persistent storage &
+SQLite tables, foreign keys from \texttt{candidates.job\_id} to \texttt{jobs.id}. \\
+\hline
+
+Ranking display order &
+Heuristic sort by screening score (not an additional LLM call). \\
+\hline
+
+RBAC (demo) &
+\texttt{X-Demo-Role} header gates internal JSON routes vs.\ careers routes. \\
+\hline
+
+Audit trail &
+Append-only style \texttt{audit\_logs} entries on create/update events. \\
+\hline
+
+File size / type validation &
+Server-side limits (e.g., 5MB) and allowed extensions for careers uploads. \\
+\hline
+
+API orchestration &
+FastAPI route handlers compose DB + AI modules; return structured JSON. \\
+\hline
+
+\end{longtable}
+
+% -------------------------------------------------
+\section{Example LLM Prompts (Artifact Reference)}
+\label{sec:prompts}
+
+\noindent\textbf{Primary artifact:} \texttt{prompts.py} in the repository. Each agent uses a \textbf{system prompt} and a structured \textbf{user payload} (often JSON built from database fields). Below are \textit{representative} natural-language summaries; your final submission should quote or paraphrase the actual constants in \texttt{prompts.py}.
+
+\subsection{Screening / Match Agent}
+
+\textbf{Intent:} Given résumé text and target role skills, return structured screening fields and a numeric match score aligned to the schema consumed by \texttt{mock\_ai.screen\_resume}.
+
+\subsection{Job Description Agent}
+
+\textbf{Intent:} Produce an engaging job description consistent with provided facts; avoid inventing benefits not supplied.
+
+\subsection{Interview Communications Agent}
+
+\textbf{Intent:} Produce scheduling email and interview questions appropriate to interview type (technical/behavioral/final).
+
+\subsection{Feedback Synthesis Agent}
+
+\textbf{Intent:} Consolidate interviewer notes into an executive summary with strengths, risks, and a measured recommendation.
+
+\subsection{Offer Letter Agent}
+
+\textbf{Intent:} Draft offer prose using provided salary and start date as facts; do not alter numeric fields.
+
+\subsection{Onboarding FAQ Agent}
+
+\textbf{Intent:} Answer FAQs conservatively; defer uncertain policy questions to HR.
+
+% -------------------------------------------------
+\section{Business Process Model (BPMN)}
+\label{sec:bpmn}
+
+The BPMN diagram should show parallel swimlanes for \textbf{Candidate}, \textbf{Recruiter/HM}, \textbf{Interviewer}, and \textbf{System/AI}, including gateways for human approval (offer approval, status changes) and automated screening after apply.
+
+\figplaceholder{BPMN diagram (hiring workflow with human gates)}{figures/bpmn-hireflow.png}
+
+% -------------------------------------------------
+\section{Context Diagram}
+\label{sec:context}
+
+External entities typically include: \textbf{Candidate}, \textbf{Hiring Manager}, \textbf{HR Recruiter}, \textbf{Interviewer}, \textbf{Email/Calendar} (conceptual), \textbf{LLM Provider}, and a future \textbf{Enterprise ATS}. The central system is HireFlow AI (FastAPI + SQLite + Web UI).
+
+\figplaceholder{Context diagram}{figures/context-hireflow.png}
+
+% -------------------------------------------------
+\section{Use Case Diagram}
+\label{sec:uc}
+
+Actors: Hiring Manager, HR Recruiter, Interviewer, Candidate, LLM Service, SQLite DB. Use cases cluster into Careers, Requisitions, Screening, Pipeline, Interviews, Offers, Onboarding, Reporting/Audit.
+
+\figplaceholder{Use case diagram}{figures/usecase-hireflow.png}
+
+% -------------------------------------------------
+\section{Use Case Descriptions (Representative)}
+
+\subsection{UC-01 Publish Requisition}
+
+\textbf{Primary actor:} Hiring Manager or HR Recruiter.
+
+\textbf{Main flow:} Open Requisitions screen $\rightarrow$ enter fields $\rightarrow$ optionally request AI draft $\rightarrow$ publish $\rightarrow$ system stores \texttt{jobs} row and sets active requisition scope.
+
+\subsection{UC-02 Apply via Careers}
+
+\textbf{Primary actor:} Candidate.
+
+\textbf{Main flow:} Browse open roles $\rightarrow$ apply $\rightarrow$ upload résumé $\rightarrow$ system extracts text $\rightarrow$ screening agent runs $\rightarrow$ candidate appears in recruiter views for that \texttt{job\_id}.
+
+\subsection{UC-03 Screen Résumé (Internal)}
+
+\textbf{Primary actor:} HR Recruiter.
+
+\textbf{Main flow:} Select active requisition $\rightarrow$ paste résumé $\rightarrow$ preview AI $\rightarrow$ save to ATS.
+
+\subsection{UC-04 Advance Pipeline}
+
+\textbf{Primary actor:} Hiring Manager or HR Recruiter.
+
+\textbf{Main flow:} View ranked list scoped to \texttt{job\_id} $\rightarrow$ choose candidate $\rightarrow$ apply new status $\rightarrow$ audit log entry.
+
+\subsection{UC-05 Schedule Interview}
+
+\textbf{Primary actor:} HR Recruiter.
+
+\textbf{Main flow:} Choose shortlisted candidate for active req $\rightarrow$ enter interviewer and time $\rightarrow$ system stores interview + generated content.
+
+\subsection{UC-06 Submit Interview Feedback}
+
+\textbf{Primary actor:} Interviewer.
+
+\textbf{Main flow:} Select interview $\rightarrow$ enter ratings/comments $\rightarrow$ AI summary stored $\rightarrow$ candidate status updated.
+
+\subsection{UC-07 Create / Approve Offer}
+
+\textbf{Primary actor:} HR Recruiter (draft/approve), Hiring Manager (read/oversight depending on your narrative).
+
+\textbf{Main flow:} Select eligible candidate $\rightarrow$ enter salary facts $\rightarrow$ generate letter draft $\rightarrow{} update approval state.
+
+% -------------------------------------------------
+\section{Data Structure Documentation (Logical)}
+
+\textbf{Job} $=$ (\texttt{job\_id}, title, department, location, salary\_min, salary\_max, experience\_level, required\_skills, description, status, created\_at)
+
+\textbf{Candidate} $=$ (\texttt{candidate\_id}, \texttt{job\_id}, name, email, resume\_text, status, created\_at)
+
+\textbf{Screening} $=$ (\texttt{screening\_id}, \texttt{candidate\_id}, skills, experience, education, certifications, strengths, weaknesses, match\_score, recommendation, created\_at)
+
+\textbf{Interview} $=$ (\texttt{interview\_id}, \texttt{candidate\_id}, interviewer\_name, scheduled\_at, interview\_type, invitation\_email, tech\_questions, behavioral\_questions, created\_at)
+
+\textbf{Feedback} $=$ (\texttt{feedback\_id}, \texttt{interview\_id}, technical\_feedback, communication\_feedback, overall\_rating, hire\_decision, ai\_summary, sentiment, strengths, risks, final\_recommendation, created\_at)
+
+\textbf{Offer} $=$ (\texttt{offer\_id}, \texttt{candidate\_id}, salary, start\_date, job\_title, reporting\_manager, letter\_text, approval\_status, created\_at)
+
+\textbf{OnboardingTask} $=$ (\texttt{task\_id}, \texttt{candidate\_id}, task\_name, completed, sort\_order)
+
+\textbf{AuditLog} $=$ (\texttt{log\_id}, action, entity\_type, entity\_id, user\_role, details, created\_at)
+
+% -------------------------------------------------
+\section{Complete Class Diagram}
+\label{sec:class}
+
+Map ORM-free POC classes to: \texttt{JobRepository}, \texttt{CandidateRepository}, \texttt{ScreeningService}, \texttt{InterviewService}, \texttt{FeedbackService}, \texttt{OfferService}, \texttt{AuditLogger}, \texttt{LLMClient}, \texttt{PromptCatalog}.
+
+\figplaceholder{Class diagram}{figures/class-hireflow.png}
+
+% -------------------------------------------------
+\section{Functional Specification (User Stories)}
+
+\begin{quote}
+As a \textbf{candidate}, I want to browse open roles and apply with my résumé, so that my application is tied to a specific requisition without exposing internal compensation data.
+\end{quote}
+
+\begin{quote}
+As a \textbf{recruiter}, I want screening and pipeline views scoped to the active \texttt{job\_id}, so that I do not mix applicants across reqs.
+\end{quote}
+
+\begin{quote}
+As a \textbf{hiring manager}, I want to publish reqs and see applicant volume and status, so that I can track hiring progress.
+\end{quote}
+
+\begin{quote}
+As an \textbf{interviewer}, I want to submit feedback and see AI summarization, so that hiring decisions are easier to review.
+\end{quote}
+
+\begin{quote}
+As \textbf{HR}, I want offer drafts and approval transitions logged, so that we maintain accountability.
+\end{quote}
+
+% -------------------------------------------------
+\section{Sequence Diagram}
+\label{sec:sequence}
+
+Illustrate \textbf{Careers apply}: Client $\rightarrow$ FastAPI multipart $\rightarrow$ text extraction $\rightarrow$ \texttt{screen\_resume} $\rightarrow$ insert candidate+screening $\rightarrow$ audit log; and \textbf{Internal screen}: JSON body $\rightarrow$ same screening path.
+
+\figplaceholder{Sequence diagram (apply + screening)}{figures/sequence-hireflow.png}
+
+% -------------------------------------------------
+\section{Interface Design}
+\label{sec:ui}
+
+\subsection{Technology and Layout}
+
+The primary UI is a React SPA with sidebar navigation, cards, and tables. Internal users select an \textbf{Active requisition} in the shell; downstream pages pass \texttt{job\_id} as a query parameter to FastAPI list endpoints.
+
+\subsection{Candidate Careers vs.\ Internal Workspace}
+
+Candidates see \textbf{Careers} branding, open roles, and their own application history keyed by email. Internal users see full requisition tools, salary bands on internal job lists, screening, pipeline, interviews, offers, onboarding, and agents documentation.
+
+\figplaceholder{Screenshot: Internal dashboard (scoped)}{figures/ui-dashboard.png}
+\figplaceholder{Screenshot: Careers apply modal}{figures/ui-careers-apply.png}
+\figplaceholder{Screenshot: Requisitions + applicants}{figures/ui-requisitions.png}
+
+% -------------------------------------------------
+\section{Database Design}
+\label{sec:dbdesign}
+
+The physical schema is implemented in \texttt{db.py} (tables: \texttt{jobs}, \texttt{candidates}, \texttt{screenings}, \texttt{interviews}, \texttt{feedback}, \texttt{offers}, \texttt{onboarding\_tasks}, \texttt{audit\_logs}). Figures below are placeholders for your ERD.
+
+\begin{landscape}
+\figplaceholder{Database ER diagram}{figures/er-hireflow.png}
+\end{landscape}
+
+\subsection{Notes on Integrity}
+
+Every \texttt{candidates} row references a \texttt{jobs.id}. Screenings attach to candidates. Interviews attach to candidates. Feedback attaches to interviews. Offers attach to candidates. This supports requisition-scoped reporting.
+
+% -------------------------------------------------
+\section{Software Design (Key Operations)}
+
+\subsection{\texttt{POST /api/careers/apply}}
+
+\textbf{Inputs:} multipart form (\texttt{job\_id}, name, email, résumé file).
+
+\textbf{Steps:} validate open job $\rightarrow$ extract text (PDF/DOCX/TXT) $\rightarrow$ call screening agent $\rightarrow$ insert candidate+screening $\rightarrow$ audit.
+
+\subsection{\texttt{GET /api/candidates/ranked?job\_id=}}
+
+\textbf{Steps:} query join candidates/jobs/screenings filtered by \texttt{job\_id} $\rightarrow$ rank ordering by score.
+
+\subsection{\texttt{POST /api/interviews}}
+
+\textbf{Steps:} load candidate context $\rightarrow$ generate email/questions $\rightarrow$ insert interview $\rightarrow$ update candidate status.
+
+\subsection{\texttt{POST /api/feedback}}
+
+\textbf{Steps:} summarize feedback via LLM/heuristic $\rightarrow$ insert feedback row $\rightarrow$ update candidate status.
+
+% -------------------------------------------------
+\section{Prototype Implementation}
+\label{sec:prototype}
+
+\subsection{Repository Layout (Selected Files)}
+
+\texttt{api/main.py} (FastAPI routes, role gates), \texttt{db.py} (SQLite), \texttt{mock\_ai.py} (AI orchestration + fallbacks), \texttt{llm.py} (API client), \texttt{prompts.py} (prompt catalog), \texttt{resume\_extract.py} (upload parsing), \texttt{frontend/} (React UI).
+
+\subsection{How to Run}
+
+From project root (with Python venv): \texttt{uvicorn api.main:app --reload --host 127.0.0.1 --port 8000}. From \texttt{frontend/}: \texttt{npm run dev} (Vite). Optional: \texttt{streamlit run app.py}.
+
+\subsection{Configuration}
+
+\texttt{OPENAI\_API\_KEY} in \texttt{.env} enables live LLM calls; otherwise heuristics keep demos runnable offline.
+
+\subsection{Security Posture (POC Caveats)}
+
+Demo RBAC is \textbf{not} cryptographically secure. Career endpoints require the Candidate role header; internal endpoints reject Candidate role for JSON that includes compensation or audit. Production would require real auth, encryption at rest for PII, virus scanning for uploads, and object storage for binaries.
+
+% -------------------------------------------------
+\section{Executive Summary}
+
+HireFlow AI prototypes an enterprise hiring workspace where LLMs accelerate drafting and summarization while SQLite and explicit API rules preserve structure, scope, and accountability. The POC demonstrates requisition-scoped hiring, a careers-facing application path, and a clear mapping from course-style deliverables (processes, data, prompts, diagrams, prototype) to concrete files and routes.
+
+% -------------------------------------------------
+\section{Project Management Deliverables}
+\label{sec:pm}
+
+\subsection{Project Activities}
+
+\begin{itemize}
+    \item Domain scoping and hiring subprocess decomposition
+    \item LLM vs.\ traditional analysis and prompt catalog authoring
+    \item API + database implementation and seed data design
+    \item React UI with role navigation and active requisition scope
+    \item Careers apply flow with upload extraction
+    \item Report and diagram integration (in progress)
+    \item Presentation preparation (pending)
+\end{itemize}
+
+\subsection{Allocation of Responsibilities}
+
+\textit{[Edit this table to match your team's actual split.]}
+
+\begin{longtable}{|p{3.5cm}|p{12.5cm}|}
+\hline
+\textbf{Team Member} & \textbf{Responsibilities (example)} \\
+\hline
+Ameya Naik & API design, AI orchestration, React scope features, integration, report technical sections \\
+\hline
+Megha Nair & UML/diagram ownership, process consistency, data model validation \\
+\hline
+Chinmyee Gurav & Report assembly, database documentation, presentation materials \\
+\hline
+\end{longtable}
+
+\subsection{Planned / Execution Timeline}
+
+\textit{Replace the dates below with your real Spring 2026 schedule.}
+
+\begin{longtable}{|p{4cm}|p{12cm}|}
+\hline
+\textbf{Period} & \textbf{Activities} \\
+\hline
+Early term & Topic selection; hiring domain analysis; deliverables checklist review \\
+\hline
+Mid term & BPMN/context/UML drafts; data schema; prompt drafts in \texttt{prompts.py} \\
+\hline
+Late term & POC feature completion; screenshots; final report and slides \\
+\hline
+\end{longtable}
+
+\subsection{Minutes of Meetings}
+
+\begin{longtable}{|p{2.5cm}|p{2.5cm}|p{3.5cm}|p{8cm}|}
+\hline
+\textbf{Date} & \textbf{Time} & \textbf{Members Present} & \textbf{Discussion Topics} \\
+\hline
+\textit{YYYY-MM-DD} & \textit{hh:mm} & \textit{Names} & \textit{Agenda / decisions / action items} \\
+\hline
+\end{longtable}
+
+% -------------------------------------------------
+\section{Expected Business Benefits}
+
+\begin{itemize}
+    \item Faster requisition authoring and résumé triage with consistent structured outputs
+    \item Fewer scope mistakes by binding candidates and internal views to \texttt{job\_id}
+    \item Improved candidate trust by hiding internal compensation from careers surfaces
+    \item Better traceability via audit logs for POC discussions about governance
+    \item A clear migration path to ATS APIs without changing the conceptual model
+\end{itemize}
+
+% -------------------------------------------------
+\section{Conclusion}
+
+HireFlow AI demonstrates a course-aligned, agentic-AI hiring POC with explicit LLM boundaries, centralized prompts, and a working two-tier UX (careers vs.\ internal). The architecture is intentionally small enough to grade while still reflecting realistic enterprise concerns: scoping, auditability, and human approval for sensitive outcomes.
+
+\end{document}
