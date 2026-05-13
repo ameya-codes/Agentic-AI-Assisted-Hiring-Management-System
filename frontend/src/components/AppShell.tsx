@@ -9,6 +9,7 @@ const NAV_BY_ROLE: Record<string, { to: string; label: string }[]> = {
   "Hiring Manager": [
     { to: "dashboard", label: "Overview" },
     { to: "jobs", label: "Requisitions" },
+    { to: "screening", label: "Screening" },
     { to: "pipeline", label: "Pipeline" },
     { to: "interviews", label: "Interviews" },
     { to: "offers", label: "Offers" },

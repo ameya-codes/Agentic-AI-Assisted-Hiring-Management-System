@@ -174,6 +174,24 @@ def _row_to_dict(row) -> dict:
     return {k: row[k] for k in row.keys()}
 
 
+async def _resume_upload_to_plaintext(resume: UploadFile) -> tuple[str, str]:
+    """Read upload, validate size, return (plain_text, filename)."""
+    raw = await resume.read()
+    if len(raw) > MAX_RESUME_BYTES:
+        raise HTTPException(status_code=413, detail="Resume must be 5MB or smaller.")
+    fn = resume.filename or "resume.pdf"
+    try:
+        text = resume_extract.extract_resume_text(fn, raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if len(text.strip()) < 40:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not read enough text from the resume. Try another PDF or DOCX export.",
+        )
+    return text, fn
+
+
 # --- Routes ---
 
 
@@ -212,19 +230,7 @@ async def api_careers_apply(
     email: str = Form(),
     resume: UploadFile = File(),
 ):
-    raw = await resume.read()
-    if len(raw) > MAX_RESUME_BYTES:
-        raise HTTPException(status_code=413, detail="Resume must be 5MB or smaller.")
-    fn = resume.filename or "resume.pdf"
-    try:
-        text = resume_extract.extract_resume_text(fn, raw)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if len(text.strip()) < 40:
-        raise HTTPException(
-            status_code=400,
-            detail="Could not read enough text from the resume. Try another PDF or DOCX export.",
-        )
+    text, _fn = await _resume_upload_to_plaintext(resume)
     with db.get_conn() as conn:
         row = conn.execute(
             "SELECT id, title, required_skills, status FROM jobs WHERE id = ?",
@@ -342,6 +348,63 @@ def api_candidate_status(
 def api_shortlisted(_role: InternalRole, job_id: int | None = None):
     rows = db.shortlisted_candidates(job_id)
     return [_row_to_dict(r) for r in rows]
+
+
+@app.post("/api/ai/preview-screen-upload")
+async def api_preview_screen_upload(
+    _role: InternalRole,
+    job_id: int = Form(),
+    resume: UploadFile = File(),
+):
+    text, _fn = await _resume_upload_to_plaintext(resume)
+    with db.get_conn() as conn:
+        job = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    if not job:
+        raise HTTPException(404, "Job not found")
+    job = _row_to_dict(job)
+    screening = mock_ai.screen_resume(
+        text,
+        job.get("required_skills") or "",
+        job.get("title") or "",
+    )
+    excerpt = text.strip()[:4000]
+    return {**screening, "extracted_excerpt": excerpt, "extracted_chars": len(text.strip())}
+
+
+@app.post("/api/candidates/screen-upload")
+async def api_screen_candidate_upload(
+    role: InternalRole,
+    job_id: int = Form(),
+    name: str = Form(),
+    email: str = Form(),
+    resume: UploadFile = File(),
+):
+    text, _fn = await _resume_upload_to_plaintext(resume)
+    with db.get_conn() as conn:
+        job = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    if not job:
+        raise HTTPException(404, "Job not found")
+    job = _row_to_dict(job)
+    screening = mock_ai.screen_resume(
+        text,
+        job.get("required_skills") or "",
+        job.get("title") or "",
+    )
+    cid = db.insert_candidate_screening(
+        job_id,
+        name.strip(),
+        email.strip(),
+        text,
+        screening,
+    )
+    db.log_audit(
+        "SCREEN_RESUME_UPLOAD",
+        "candidates",
+        cid,
+        role,
+        name.strip(),
+    )
+    return {"candidate_id": cid, "screening": screening}
 
 
 @app.post("/api/ai/preview-screen")
