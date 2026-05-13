@@ -7,3 +7,4 @@ frontend/node_modules/
 frontend/dist/
 hiring_poc.db
 .DS_Store
+.vercel

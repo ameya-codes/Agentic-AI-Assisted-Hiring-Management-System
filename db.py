@@ -3,12 +3,18 @@ SQLite persistence for the Hiring Management POC.
 Beginner-friendly: plain SQL, no ORM.
 """
 
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "hiring_poc.db"
+# Vercel serverless has a read-only deployment filesystem.
+# Use /tmp there so SQLite can still initialize for demo requests.
+if os.getenv("VERCEL"):
+    DB_PATH = Path("/tmp/hiring_poc.db")
+else:
+    DB_PATH = Path(__file__).parent / "hiring_poc.db"
 
 
 def _now() -> str:
